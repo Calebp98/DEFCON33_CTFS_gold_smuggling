@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smuggling Network Analysis - DEFCON CTF</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        body {
+            font-family: 'Courier New', monospace;
+            background: #000;
+            color: #fff;
+            margin: 0;
+            padding: 20px;
+            font-size: 14px;
+        }
+        
+        h1 {
+            text-align: center;
+            color: #fff;
+            margin-bottom: 5px;
+            letter-spacing: 2px;
+        }
+        
+        .subtitle {
+            text-align: center;
+            color: #ccc;
+            margin-bottom: 20px;
+            font-size: 12px;
+        }
+        
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        
+        button {
+            background: #000;
+            color: #fff;
+            border: 1px solid #fff;
+            padding: 6px 12px;
+            cursor: pointer;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+        }
+        
+        button:hover {
+            background: #fff;
+            color: #000;
+        }
+        
+        #network {
+            background: #000;
+            border: 1px solid #fff;
+            margin-bottom: 20px;
+        }
+        
+        .info-panel {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+        
+        .info-box {
+            flex: 1;
+            min-width: 250px;
+            background: #000;
+            border: 1px solid #fff;
+            padding: 15px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        
+        .info-box h3 {
+            color: #fff;
+            margin: 0 0 10px 0;
+            border-bottom: 1px solid #fff;
+            padding-bottom: 5px;
+            font-size: 14px;
+        }
+        
+        .route-item {
+            padding: 6px;
+            margin: 5px 0;
+            background: #000;
+            border: 1px solid #666;
+            font-size: 11px;
+            font-family: 'Courier New', monospace;
+        }
+        
+        .suspicious-item {
+            border-color: #fff;
+            background: #222;
+        }
+        
+        .node-tooltip {
+            position: absolute;
+            background: #000;
+            color: #fff;
+            padding: 10px;
+            border: 1px solid #fff;
+            pointer-events: none;
+            z-index: 1000;
+            font-size: 11px;
+            max-width: 250px;
+            font-family: 'Courier New', monospace;
+        }
+        
+        .legend {
+            background: #000;
+            border: 1px solid #fff;
+            padding: 15px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        
+        .legend-item {
+            display: inline-block;
+            margin-right: 20px;
+            font-size: 12px;
+        }
+        
+        .legend-color {
+            display: inline-block;
+            width: 20px;
+            height: 2px;
+            margin-right: 5px;
+            vertical-align: middle;
+            background: #fff;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚢 SMUGGLING NETWORK ANALYSIS</h1>
+        <p class="subtitle">DEFCON33 CTF - "Jack Colton" Emerald Smuggling Investigation</p>
+        
+        <div class="legend">
+            <strong>EDGE WEIGHT LEGEND:</strong>
+            <div class="legend-item">
+                <span class="legend-color" style="background: #ff0000;"></span>
+                WEIGHT DISCREPANCY (AXAD)
+            </div>
+            <div class="legend-item">
+                <span class="legend-color" style="background: #ffff00;"></span>
+                HOLLOW PENDANT (AFAF)
+            </div>
+            <div class="legend-item">
+                <span class="legend-color" style="background: #666;"></span>
+                LIGHT (&lt; 2oz)
+            </div>
+            <div class="legend-item">
+                <span class="legend-color" style="background: #999;"></span>
+                MEDIUM (2-4oz)
+            </div>
+            <div class="legend-item">
+                <span class="legend-color" style="background: #ccc;"></span>
+                HEAVY (4-7oz)
+            </div>
+            <div class="legend-item">
+                <span class="legend-color" style="background: #fff;"></span>
+                VERY HEAVY (&gt; 7oz)
+            </div>
+        </div>
+        
+        <div class="controls">
+            <div class="control-group">
+                <h3>🎯 Highlight Routes</h3>
+                <button onclick="highlightPortRoutes()">From Port</button>
+                <button onclick="highlightToPort()">To Port</button>
+                <button onclick="highlightSuspicious()">Suspicious Items</button>
+                <button onclick="resetHighlight()">Reset</button>
+            </div>
+            
+            <div class="control-group">
+                <h3>📊 Filter by Weight</h3>
+                <button onclick="filterByWeight('light')">Light (&lt;2oz)</button>
+                <button onclick="filterByWeight('medium')">Medium (2-4oz)</button>
+                <button onclick="filterByWeight('heavy')">Heavy (&gt;4oz)</button>
+                <button onclick="showAll()">Show All</button>
+            </div>
+        </div>
+        
+        <div id="network"></div>
+        
+        <div class="info-panel">
+            <div class="info-box">
+                <h3>🚢 Routes FROM Port</h3>
+                <div id="from-port"></div>
+            </div>
+            
+            <div class="info-box">
+                <h3>📦 Routes TO Port</h3>
+                <div id="to-port"></div>
+            </div>
+            
+            <div class="info-box">
+                <h3>🚨 Suspicious Items</h3>
+                <div id="suspicious"></div>
+            </div>
+            
+            <div class="info-box">
+                <h3>💎 Analysis Notes</h3>
+                <div id="analysis">
+                    <p><strong>Key Findings:</strong></p>
+                    <ul>
+                        <li>Only 1 shipment FROM Port: Coffee beans to Zolo's Camp (9oz)</li>
+                        <li>2 shipments TO Port: Canvas sack (4.6oz) and gum sleeves (1.5oz)</li>
+                        <li>Most suspicious: Hollow pendant (0.5oz) - perfect for hiding emerald!</li>
+                        <li>Route: Transit Hub → Port via hollow pendant</li>
+                    </ul>
+                    <p><strong>Likely Smuggling Path:</strong><br>
+                    Transit Hub → Port (hollow pendant) → Zolo's Camp (coffee beans)</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="node-tooltip" id="tooltip" style="display: none;"></div>
+
+    <script>
+        const data = [
+            {id: "ADGA", source: "Temple", dest: "Shipping Yard", weight: 1.5, description: "Stack of photos in rubber band"},
+            {id: "AFDG", source: "Customs Outpost", dest: "Transit Hub", weight: 1.0, description: "Empty tin labeled 'sardines'"},
+            {id: "AFAF", source: "Transit Hub", dest: "Port", weight: 0.5, description: "Hollow pendant"},
+            {id: "AFX", source: "Transit Hub", dest: "Storage House", weight: 2.1, description: "Boot pocket"},
+            {id: "AGFX", source: "Shipping Yard", dest: "Customs Outpost", weight: 2.1, description: "Velvet-lined walnut case"},
+            {id: "AGF", source: "Shipping Yard", dest: "Port", weight: 4.6, description: "Canvas sack marked 'tools'"},
+            {id: "AXAD", source: "Customs Outpost", dest: "Transit Hub", weight: 2.6, description: "Small carved box with foam lining (2.5 oz)"},
+            {id: "DAGG", source: "Storage House", dest: "Shipping Yard", weight: 2.1, description: "Boot pocket"},
+            {id: "DGAF", source: "Zolo's Camp", dest: "Customs Outpost", weight: 10.0, description: "Matchsticks (10)"},
+            {id: "DGFX", source: "Customs Outpost", dest: "Transit Hub", weight: 2.5, description: "Small carved box with foam lining (2.5 oz)"},
+            {id: "FAXX", source: "Customs Outpost", dest: "Temple", weight: 9.0, description: "Stack of newspapers"},
+            {id: "FDFA", source: "Jungle", dest: "Shipping Yard", weight: 1.6, description: "Slim harmonica in cloth"},
+            {id: "FXDF", source: "Transit Hub", dest: "Port", weight: 1.5, description: "Stack of photos in rubber band"},
+            {id: "FXXD", source: "Customs Outpost", dest: "Transit Hub", weight: 2.5, description: "Small carved box with foam lining (2.5 oz)"},
+            {id: "FADX", source: "Transit Hub", dest: "Port", weight: 1.5, description: "Packet of chewing gum sleeves"},
+            {id: "FFDF", source: "Temple", dest: "Shipping Yard", weight: 1.5, description: "Packet of chewing gum sleeves"},
+            {id: "FGD", source: "Jungle", dest: "Temple", weight: 7.2, description: "Wrapped in banana leaves"},
+            {id: "FXA", source: "Temple", dest: "Zolo's Camp", weight: 3.2, description: "Miniature bust in plaster"},
+            {id: "GAFX", source: "Zolo's Camp", dest: "Jungle", weight: 6.7, description: "Rolled hammock wrapped in netting"},
+            {id: "GXFD", source: "Transit Hub", dest: "Port", weight: 1.5, description: "Box of crickets"},
+            {id: "GXXF", source: "Temple", dest: "Zolo's Camp", weight: 10.0, description: "Paper clips (10, individual)"},
+            {id: "XADX", source: "Zolo's Camp", dest: "Customs Outpost", weight: 5.5, description: "Sealed coffee canister"},
+            {id: "XFGA", source: "Port", dest: "Zolo's Camp", weight: 9.0, description: "Coffee beans boxes"},
+            {id: "XXFA", source: "Transit Hub", dest: "Port", weight: 1.5, description: "Packet of chewing gum sleeves"}
+        ];
+
+        const suspiciousKeywords = ['hollow', 'box', 'case', 'canister', 'tin', 'sack', 'pocket'];
+        
+        const width = 1200;
+        const height = 600;
+        
+        const svg = d3.select("#network")
+            .append("svg")
+            .attr("width", width)
+            .attr("height", height);
+        
+        const nodes = Array.from(new Set(data.flatMap(d => [d.source, d.dest])))
+            .map(id => ({id}));
+        
+        const links = data.map(d => {
+            // Check for weight discrepancies
+            const isWeightDiscrepancy = d.id === 'AXAD' && d.description.includes('2.5 oz') && d.weight === 2.6;
+            const isHollowPendant = d.id === 'AFAF' && d.description.includes('Hollow pendant');
+            
+            return {
+                source: d.source,
+                target: d.dest,
+                weight: d.weight,
+                id: d.id,
+                description: d.description,
+                suspicious: suspiciousKeywords.some(keyword => d.description.toLowerCase().includes(keyword)),
+                weightDiscrepancy: isWeightDiscrepancy,
+                hollowPendant: isHollowPendant
+            };
+        });
+        
+        const simulation = d3.forceSimulation(nodes)
+            .force("link", d3.forceLink(links).id(d => d.id).distance(150))
+            .force("charge", d3.forceManyBody().strength(-800))
+            .force("center", d3.forceCenter(width / 2, height / 2))
+            .force("collision", d3.forceCollide().radius(40));
+        
+        function getEdgeColor(d) {
+            if (d.weightDiscrepancy) return "#ff0000"; // Red for weight discrepancy
+            if (d.hollowPendant) return "#ffff00"; // Yellow for hollow pendant
+            
+            const weight = d.weight || d;
+            if (weight > 7) return "#fff";
+            if (weight > 4) return "#ccc";
+            if (weight > 2) return "#999";
+            return "#666";
+        }
+        
+        function getEdgeWidth(d) {
+            if (d.weightDiscrepancy || d.hollowPendant) return 5; // Thicker for suspicious items
+            
+            const weight = d.weight || d;
+            if (weight > 7) return 4;
+            if (weight > 4) return 3;
+            if (weight > 2) return 2.5;
+            return 2;
+        }
+        
+        // Add arrow markers
+        svg.append("defs").selectAll("marker")
+            .data(["end"])
+            .enter().append("marker")
+            .attr("id", "arrow")
+            .attr("viewBox", "0 -5 10 10")
+            .attr("refX", 25)
+            .attr("refY", 0)
+            .attr("markerWidth", 6)
+            .attr("markerHeight", 6)
+            .attr("orient", "auto")
+            .append("path")
+            .attr("d", "M0,-5L10,0L0,5")
+            .attr("fill", "#fff");
+        
+        // Group links by same source-target pairs to create curved paths
+        const linkGroups = {};
+        links.forEach((link, i) => {
+            const key = `${link.source.id}-${link.target.id}`;
+            const reverseKey = `${link.target.id}-${link.source.id}`;
+            
+            if (!linkGroups[key] && !linkGroups[reverseKey]) {
+                linkGroups[key] = [];
+            }
+            
+            if (linkGroups[key]) {
+                linkGroups[key].push({...link, index: i, groupIndex: linkGroups[key].length});
+            } else {
+                linkGroups[reverseKey].push({...link, index: i, groupIndex: linkGroups[reverseKey].length});
+            }
+        });
+
+        const link = svg.append("g")
+            .selectAll("path")
+            .data(links)
+            .enter().append("path")
+            .attr("stroke", d => getEdgeColor(d))
+            .attr("stroke-width", d => getEdgeWidth(d))
+            .attr("stroke-opacity", d => (d.weightDiscrepancy || d.hollowPendant) ? 1.0 : 0.8)
+            .attr("fill", "none")
+            .attr("marker-end", "url(#arrow)");
+        
+        const node = svg.append("g")
+            .selectAll("circle")
+            .data(nodes)
+            .enter().append("circle")
+            .attr("r", 20)
+            .attr("fill", d => d.id === "Port" ? "#fff" : "#000")
+            .attr("stroke", "#fff")
+            .attr("stroke-width", 2)
+            .call(d3.drag()
+                .on("start", dragstarted)
+                .on("drag", dragged)
+                .on("end", dragended));
+        
+        const label = svg.append("g")
+            .selectAll("text")
+            .data(nodes)
+            .enter().append("text")
+            .text(d => d.id)
+            .attr("font-size", 12)
+            .attr("text-anchor", "middle")
+            .attr("fill", d => d.id === "Port" ? "#000" : "#fff")
+            .attr("font-family", "Courier New")
+            .attr("font-weight", "bold");
+
+        // Add edge labels
+        const edgeLabels = svg.append("g")
+            .selectAll("text")
+            .data(links)
+            .enter().append("text")
+            .attr("font-size", d => (d.weightDiscrepancy || d.hollowPendant) ? 11 : 9)
+            .attr("text-anchor", "middle")
+            .attr("fill", d => {
+                if (d.weightDiscrepancy) return "#ff0000";
+                if (d.hollowPendant) return "#ffff00";
+                return "#fff";
+            })
+            .attr("font-family", "Courier New")
+            .attr("font-weight", d => (d.weightDiscrepancy || d.hollowPendant) ? "bold" : "normal")
+            .text(d => {
+                if (d.weightDiscrepancy) return `${d.id} (${d.weight}oz!) DISCREPANCY`;
+                if (d.hollowPendant) return `${d.id} (${d.weight}oz) HOLLOW`;
+                return `${d.id} (${d.weight}oz)`;
+            });
+        
+        const tooltip = d3.select("#tooltip");
+        
+        node
+            .on("mouseover", function(event, d) {
+                const connectedLinks = links.filter(l => l.source.id === d.id || l.target.id === d.id);
+                let tooltipContent = `<strong>${d.id}</strong><br><br>`;
+                
+                const incoming = connectedLinks.filter(l => l.target.id === d.id);
+                const outgoing = connectedLinks.filter(l => l.source.id === d.id);
+                
+                if (incoming.length > 0) {
+                    tooltipContent += "<strong>Incoming:</strong><br>";
+                    incoming.forEach(l => {
+                        tooltipContent += `${l.id}: ${l.source.id} → ${l.target.id} (${l.weight}oz)<br>${l.description}<br><br>`;
+                    });
+                }
+                
+                if (outgoing.length > 0) {
+                    tooltipContent += "<strong>Outgoing:</strong><br>";
+                    outgoing.forEach(l => {
+                        tooltipContent += `${l.id}: ${l.source.id} → ${l.target.id} (${l.weight}oz)<br>${l.description}<br><br>`;
+                    });
+                }
+                
+                tooltip.html(tooltipContent)
+                    .style("display", "block")
+                    .style("left", (event.pageX + 10) + "px")
+                    .style("top", (event.pageY + 10) + "px");
+            })
+            .on("mouseout", function() {
+                tooltip.style("display", "none");
+            });
+        
+        function getCurvedPath(d) {
+            const dx = d.target.x - d.source.x;
+            const dy = d.target.y - d.source.y;
+            const dr = Math.sqrt(dx * dx + dy * dy) * 0.8; // Curve factor
+            
+            // Find how many links between same nodes
+            const sameLinks = links.filter(l => 
+                (l.source.id === d.source.id && l.target.id === d.target.id) ||
+                (l.source.id === d.target.id && l.target.id === d.source.id)
+            );
+            
+            const linkIndex = sameLinks.findIndex(l => l.id === d.id);
+            const totalLinks = sameLinks.length;
+            
+            // Offset for multiple edges
+            const offset = totalLinks > 1 ? (linkIndex - (totalLinks - 1) / 2) * 30 : 0;
+            
+            if (Math.abs(offset) < 0.1) {
+                // Straight line for single edges
+                return `M${d.source.x},${d.source.y}L${d.target.x},${d.target.y}`;
+            } else {
+                // Curved path for multiple edges
+                return `M${d.source.x},${d.source.y}A${dr + Math.abs(offset)},${dr + Math.abs(offset)} 0 0,${offset > 0 ? 1 : 0} ${d.target.x},${d.target.y}`;
+            }
+        }
+
+        function getEdgeLabelPosition(d) {
+            const dx = d.target.x - d.source.x;
+            const dy = d.target.y - d.source.y;
+            
+            // Find offset like in getCurvedPath
+            const sameLinks = links.filter(l => 
+                (l.source.id === d.source.id && l.target.id === d.target.id) ||
+                (l.source.id === d.target.id && l.target.id === d.source.id)
+            );
+            
+            const linkIndex = sameLinks.findIndex(l => l.id === d.id);
+            const totalLinks = sameLinks.length;
+            const offset = totalLinks > 1 ? (linkIndex - (totalLinks - 1) / 2) * 30 : 0;
+            
+            if (Math.abs(offset) < 0.1) {
+                // Straight line - position at midpoint
+                return {
+                    x: (d.source.x + d.target.x) / 2,
+                    y: (d.source.y + d.target.y) / 2
+                };
+            } else {
+                // Curved line - position along curve
+                const midX = (d.source.x + d.target.x) / 2;
+                const midY = (d.source.y + d.target.y) / 2;
+                const perpX = -dy / Math.sqrt(dx * dx + dy * dy);
+                const perpY = dx / Math.sqrt(dx * dx + dy * dy);
+                
+                return {
+                    x: midX + perpX * offset * 0.5,
+                    y: midY + perpY * offset * 0.5
+                };
+            }
+        }
+
+        simulation.on("tick", () => {
+            link.attr("d", getCurvedPath);
+            
+            node
+                .attr("cx", d => d.x)
+                .attr("cy", d => d.y);
+            
+            label
+                .attr("x", d => d.x)
+                .attr("y", d => d.y + 5);
+            
+            edgeLabels
+                .attr("x", d => getEdgeLabelPosition(d).x)
+                .attr("y", d => getEdgeLabelPosition(d).y);
+        });
+        
+        function dragstarted(event, d) {
+            if (!event.active) simulation.alphaTarget(0.3).restart();
+            d.fx = d.x;
+            d.fy = d.y;
+        }
+        
+        function dragged(event, d) {
+            d.fx = event.x;
+            d.fy = event.y;
+        }
+        
+        function dragended(event, d) {
+            if (!event.active) simulation.alphaTarget(0);
+            d.fx = event.x;
+            d.fy = event.y;
+        }
+        
+        // Analysis functions
+        function populateInfoBoxes() {
+            // Routes from Port
+            const fromPort = data.filter(d => d.source === "Port");
+            d3.select("#from-port").html(
+                fromPort.map(d => 
+                    `<div class="route-item weight-${d.weight > 7 ? 'high' : d.weight > 2 ? 'medium' : 'low'}">
+                        <strong>${d.id}</strong>: Port → ${d.dest} (${d.weight}oz)<br>
+                        ${d.description}
+                    </div>`
+                ).join("")
+            );
+            
+            // Routes to Port
+            const toPort = data.filter(d => d.dest === "Port");
+            d3.select("#to-port").html(
+                toPort.map(d => 
+                    `<div class="route-item weight-${d.weight > 7 ? 'high' : d.weight > 2 ? 'medium' : 'low'}">
+                        <strong>${d.id}</strong>: ${d.source} → Port (${d.weight}oz)<br>
+                        ${d.description}
+                    </div>`
+                ).join("")
+            );
+            
+            // Suspicious items
+            const suspicious = data.filter(d => 
+                suspiciousKeywords.some(keyword => d.description.toLowerCase().includes(keyword))
+            );
+            d3.select("#suspicious").html(
+                suspicious.map(d => 
+                    `<div class="route-item suspicious-item">
+                        <strong>${d.id}</strong>: ${d.source} → ${d.dest} (${d.weight}oz)<br>
+                        ${d.description}
+                    </div>`
+                ).join("")
+            );
+        }
+        
+        function highlightPortRoutes() {
+            resetHighlight();
+            link.attr("stroke-opacity", d => d.source.id === "Port" ? 1 : 0.2);
+            node.attr("opacity", d => d.id === "Port" || links.some(l => l.source.id === "Port" && l.target.id === d.id) ? 1 : 0.3);
+        }
+        
+        function highlightToPort() {
+            resetHighlight();
+            link.attr("stroke-opacity", d => d.target.id === "Port" ? 1 : 0.2);
+            node.attr("opacity", d => d.id === "Port" || links.some(l => l.target.id === "Port" && l.source.id === d.id) ? 1 : 0.3);
+        }
+        
+        function highlightSuspicious() {
+            resetHighlight();
+            link.attr("stroke-opacity", d => d.suspicious ? 1 : 0.2);
+            node.attr("opacity", d => links.some(l => l.suspicious && (l.source.id === d.id || l.target.id === d.id)) ? 1 : 0.3);
+        }
+        
+        function resetHighlight() {
+            link.attr("stroke-opacity", 0.8);
+            node.attr("opacity", 1);
+            label.attr("opacity", 1);
+        }
+        
+        function filterByWeight(category) {
+            resetHighlight();
+            let condition;
+            if (category === 'light') condition = d => d.weight < 2;
+            else if (category === 'medium') condition = d => d.weight >= 2 && d.weight <= 4;
+            else if (category === 'heavy') condition = d => d.weight > 4;
+            
+            link.attr("stroke-opacity", d => condition(d) ? 1 : 0.1);
+            node.attr("opacity", d => links.some(l => condition(l) && (l.source.id === d.id || l.target.id === d.id)) ? 1 : 0.2);
+        }
+        
+        function showAll() {
+            resetHighlight();
+        }
+        
+        // Initialize info boxes
+        populateInfoBoxes();
+    </script>
+</body>
+</html>
