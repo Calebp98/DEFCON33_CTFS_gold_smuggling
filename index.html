@@ -172,6 +172,7 @@
                 <button onclick="highlightPortRoutes()">From Port</button>
                 <button onclick="highlightToPort()">To Port</button>
                 <button onclick="highlightSuspicious()">Suspicious Items</button>
+                <button onclick="highlightSmugglingPath()">Smuggling Path</button>
                 <button onclick="resetHighlight()">Reset</button>
             </div>
             
@@ -188,6 +189,41 @@
         
         <div class="info-panel">
             <div class="info-box">
+                <h3>🎯 COMPLETE SMUGGLING PATH</h3>
+                <div style="background: #222; padding: 15px; border: 2px solid #fff; font-family: 'Courier New', monospace;">
+                    <div style="color: #ff0000; font-weight: bold; margin-bottom: 10px;">
+                        STEP 1: AXAD (2.6oz! - WEIGHT DISCREPANCY)
+                    </div>
+                    <div style="margin-left: 20px; margin-bottom: 15px;">
+                        Customs Outpost → Transit Hub<br>
+                        "Small carved box with foam lining (2.5 oz)" but weighs 2.6oz<br>
+                        <strong>+0.1oz = EMERALD ADDED!</strong>
+                    </div>
+
+                    <div style="color: #ffff00; font-weight: bold; margin-bottom: 10px;">
+                        STEP 2: AFAF (0.5oz - PERFECT TRANSFER)
+                    </div>
+                    <div style="margin-left: 20px; margin-bottom: 15px;">
+                        Transit Hub → Port<br>
+                        "Hollow pendant" - emerald transferred from box<br>
+                        <strong>DELIVERED TO JACK COLTON</strong>
+                    </div>
+
+                    <div style="color: #fff; font-weight: bold; margin-bottom: 10px;">
+                        STEP 3: XFGA (9.0oz - FINAL SMUGGLE OUT)
+                    </div>
+                    <div style="margin-left: 20px;">
+                        Port → Zolo's Camp<br>
+                        "Coffee beans boxes" - emerald hidden in heavy cargo<br>
+                        <strong>EMERALD SUCCESSFULLY SMUGGLED OUT!</strong>
+                    </div>
+                </div>
+                <div style="margin-top: 10px; text-align: center; font-weight: bold;">
+                    🔗 FULL PATH: Customs Outpost → Transit Hub → Port → Zolo's Camp
+                </div>
+            </div>
+            
+            <div class="info-box">
                 <h3>🚢 Routes FROM Port</h3>
                 <div id="from-port"></div>
             </div>
@@ -200,21 +236,6 @@
             <div class="info-box">
                 <h3>🚨 Suspicious Items</h3>
                 <div id="suspicious"></div>
-            </div>
-            
-            <div class="info-box">
-                <h3>💎 Analysis Notes</h3>
-                <div id="analysis">
-                    <p><strong>Key Findings:</strong></p>
-                    <ul>
-                        <li>Only 1 shipment FROM Port: Coffee beans to Zolo's Camp (9oz)</li>
-                        <li>2 shipments TO Port: Canvas sack (4.6oz) and gum sleeves (1.5oz)</li>
-                        <li>Most suspicious: Hollow pendant (0.5oz) - perfect for hiding emerald!</li>
-                        <li>Route: Transit Hub → Port via hollow pendant</li>
-                    </ul>
-                    <p><strong>Likely Smuggling Path:</strong><br>
-                    Transit Hub → Port (hollow pendant) → Zolo's Camp (coffee beans)</p>
-                </div>
             </div>
         </div>
     </div>
@@ -251,8 +272,8 @@
 
         const suspiciousKeywords = ['hollow', 'box', 'case', 'canister', 'tin', 'sack', 'pocket'];
         
-        const width = 1200;
-        const height = 600;
+        const width = 1400;
+        const height = 800;
         
         const svg = d3.select("#network")
             .append("svg")
@@ -280,10 +301,10 @@
         });
         
         const simulation = d3.forceSimulation(nodes)
-            .force("link", d3.forceLink(links).id(d => d.id).distance(150))
-            .force("charge", d3.forceManyBody().strength(-800))
+            .force("link", d3.forceLink(links).id(d => d.id).distance(250))
+            .force("charge", d3.forceManyBody().strength(-1500))
             .force("center", d3.forceCenter(width / 2, height / 2))
-            .force("collision", d3.forceCollide().radius(40));
+            .force("collision", d3.forceCollide().radius(60));
         
         function getEdgeColor(d) {
             if (d.weightDiscrepancy) return "#ff0000"; // Red for weight discrepancy
@@ -352,10 +373,10 @@
             .selectAll("circle")
             .data(nodes)
             .enter().append("circle")
-            .attr("r", 20)
+            .attr("r", 25)
             .attr("fill", d => d.id === "Port" ? "#fff" : "#000")
             .attr("stroke", "#fff")
-            .attr("stroke-width", 2)
+            .attr("stroke-width", 3)
             .call(d3.drag()
                 .on("start", dragstarted)
                 .on("drag", dragged)
@@ -366,7 +387,7 @@
             .data(nodes)
             .enter().append("text")
             .text(d => d.id)
-            .attr("font-size", 12)
+            .attr("font-size", 14)
             .attr("text-anchor", "middle")
             .attr("fill", d => d.id === "Port" ? "#000" : "#fff")
             .attr("font-family", "Courier New")
@@ -591,6 +612,16 @@
             node.attr("opacity", d => links.some(l => condition(l) && (l.source.id === d.id || l.target.id === d.id)) ? 1 : 0.2);
         }
         
+        function highlightSmugglingPath() {
+            resetHighlight();
+            const smugglingIds = ['AXAD', 'AFAF', 'XFGA'];
+            link.attr("stroke-opacity", d => smugglingIds.includes(d.id) ? 1 : 0.1);
+            node.attr("opacity", d => {
+                const relatedNodes = ['Customs Outpost', 'Transit Hub', 'Port', 'Zolo\'s Camp'];
+                return relatedNodes.includes(d.id) ? 1 : 0.3;
+            });
+        }
+
         function showAll() {
             resetHighlight();
         }
